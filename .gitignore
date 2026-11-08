@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+docker-data/
+
+# Misc
+.vercel
+.turbo
+*.pem
+# The Aiven CA certificate is public (it only lets the client verify the server) and the image needs it.
+!apps/api/certs/aiven-ca.pem
+
+# Archives / local backups
+*.zip

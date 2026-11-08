@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # The app uses MySQL (Prisma provider = "mysql"); there is no MongoDB or Redis.
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-root-password
+          MYSQL_DATABASE: nexus_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-only-root-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # CI-only database (throwaway service container above); not a real credential.
+      DATABASE_URL: mysql://root:ci-only-root-password@127.0.0.1:3306/nexus_ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: the test scripts rely on the built-in test runner's glob support.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Order matters: the API compiles against the generated types of @nexus/shared.
+      - run: npm run build:shared
+      - run: npm run build --workspace=@nexus/api
+
+      - name: Type-check API (source and tests)
+        run: npm run typecheck --workspace=@nexus/api
+
+      - name: API tests
+        run: npm test --workspace=@nexus/api
+
+      - name: Web tests
+        run: npm test --workspace=@nexus/web
+
+      - name: Database script tests (Prisma safety guard, baseline planner)
+        run: npm run test:scripts
+
+      - name: Build web
+        run: npm run build --workspace=@nexus/web
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+
+      - name: Type-check web
+        run: npm run typecheck --workspace=@nexus/web
+
+      # ---- database -------------------------------------------------------------------------
+      - name: Migrations - apply to a fresh database and check for schema drift
+        if: ${{ hashFiles('apps/api/prisma/migrations/**/migration.sql') != '' }}
+        run: |
+          npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+          # the migrated database must match schema.prisma exactly
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel apps/api/prisma/schema.prisma --exit-code
+          # the migration history must reproduce schema.prisma on an empty shadow database
+          mysql -h127.0.0.1 -uroot -pci-only-root-password -e 'CREATE DATABASE IF NOT EXISTS nexus_shadow'
+          npx prisma migrate diff --from-migrations apps/api/prisma/migrations --to-schema-datamodel apps/api/prisma/schema.prisma --shadow-database-url "mysql://root:ci-only-root-password@127.0.0.1:3306/nexus_shadow" --exit-code
+
+      - name: No migrations committed yet - create the CI schema with db push (CI database only)
+        if: ${{ hashFiles('apps/api/prisma/migrations/**/migration.sql') == '' }}
+        run: |
+          echo "::warning title=No Prisma migrations::apps/api/prisma/migrations is empty. Run 'npm run db:baseline' once and commit the result (see docs/DATABASE.md)."
+          npx prisma db push --skip-generate --schema apps/api/prisma/schema.prisma
+
+      - name: API health and readiness (production mode, random throwaway secrets)
+        run: |
+          export NODE_ENV=production
+          export CLIENT_URL=http://localhost:3000
+          export JWT_SECRET="$(openssl rand -base64 48)"
+          export JWT_REFRESH_SECRET="$(openssl rand -base64 48)"
+          export COOKIE_SECRET="$(openssl rand -base64 48)"
+          npm run start --workspace=@nexus/api &
+          curl -f --retry 15 --retry-delay 2 --retry-connrefused http://localhost:4000/api/v1/health
+          curl -f http://localhost:4000/api/v1/health/ready

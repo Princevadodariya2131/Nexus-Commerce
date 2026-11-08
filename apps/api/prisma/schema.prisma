@@ -1,0 +1,437 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  customer
+  vendor
+  admin
+  super_admin
+}
+
+enum VendorStatus {
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  processing
+  shipped
+  delivered
+  cancelled
+  refunded
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum PaymentMethod {
+  stripe
+  razorpay
+  cod
+}
+
+enum CouponType {
+  percentage
+  fixed
+}
+
+model User {
+  id                       Int       @id @default(autoincrement()) @db.UnsignedInt
+  email                    String    @unique @db.VarChar(255)
+  password                 String    @db.VarChar(255)
+  firstName                String    @map("first_name") @db.VarChar(100)
+  lastName                 String    @map("last_name") @db.VarChar(100)
+  avatar                   String?   @db.VarChar(500)
+  phone                    String?   @db.VarChar(30)
+  role                     UserRole  @default(customer)
+  isEmailVerified          Boolean   @default(false) @map("is_email_verified")
+  emailVerificationToken   String?   @map("email_verification_token") @db.VarChar(255)
+  emailVerificationExpires DateTime? @map("email_verification_expires")
+  passwordResetToken       String?   @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires     DateTime? @map("password_reset_expires")
+  refreshToken             String?   @map("refresh_token") @db.Text
+  language                 String    @default("en") @db.VarChar(10)
+  currency                 String    @default("USD") @db.VarChar(10)
+  notifyEmail              Boolean   @default(true) @map("notify_email")
+  notifyPush               Boolean   @default(true) @map("notify_push")
+  notifyMarketing          Boolean   @default(false) @map("notify_marketing")
+  vendorId                 Int?      @map("vendor_id") @db.UnsignedInt
+  lastLogin                DateTime? @map("last_login")
+  isActive                 Boolean   @default(true) @map("is_active")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  vendor       Vendor?        @relation("VendorOwner", fields: [vendorId], references: [id])
+  ownedVendor  Vendor?        @relation("VendorUser")
+  addresses    UserAddress[]
+  cart         Cart?
+  orders       Order[]
+  reviews      Review[]
+  wishlist     WishlistItem[]
+  notifications Notification[]
+  blogs        Blog[]
+
+  @@map("users")
+}
+
+model UserAddress {
+  id        Int     @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int     @map("user_id") @db.UnsignedInt
+  label     String  @default("Home") @db.VarChar(50)
+  street    String  @db.VarChar(255)
+  city      String  @db.VarChar(100)
+  state     String  @db.VarChar(100)
+  country   String  @db.VarChar(100)
+  zipCode   String  @map("zip_code") @db.VarChar(20)
+  phone     String? @db.VarChar(30)
+  isDefault Boolean @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_addresses")
+}
+
+model Vendor {
+  id              Int          @id @default(autoincrement()) @db.UnsignedInt
+  userId          Int          @unique @map("user_id") @db.UnsignedInt
+  businessName    String       @map("business_name") @db.VarChar(255)
+  slug            String       @unique @db.VarChar(255)
+  description     String?      @db.Text
+  logo            String?      @db.VarChar(500)
+  banner          String?      @db.VarChar(500)
+  email           String       @db.VarChar(255)
+  phone           String?      @db.VarChar(30)
+  street          String?      @db.VarChar(255)
+  city            String?      @db.VarChar(100)
+  state           String?      @db.VarChar(100)
+  country         String?      @db.VarChar(100)
+  zipCode         String?      @map("zip_code") @db.VarChar(20)
+  taxId           String?      @map("tax_id") @db.VarChar(100)
+  status          VendorStatus @default(pending)
+  commissionRate  Decimal      @default(10) @map("commission_rate") @db.Decimal(5, 2)
+  totalSales      Decimal      @default(0) @map("total_sales") @db.Decimal(14, 2)
+  totalEarnings   Decimal      @default(0) @map("total_earnings") @db.Decimal(14, 2)
+  pendingPayout   Decimal      @default(0) @map("pending_payout") @db.Decimal(14, 2)
+  rating          Decimal      @default(0) @db.Decimal(3, 2)
+  reviewCount     Int          @default(0) @map("review_count") @db.UnsignedInt
+  isVerified      Boolean      @default(false) @map("is_verified")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  user     User      @relation("VendorUser", fields: [userId], references: [id], onDelete: Cascade)
+  members  User[]    @relation("VendorOwner")
+  products Product[]
+  orderItems OrderItem[]
+
+  @@map("vendors")
+}
+
+model Category {
+  id          Int        @id @default(autoincrement()) @db.UnsignedInt
+  name        String     @db.VarChar(255)
+  slug        String     @unique @db.VarChar(255)
+  description String?    @db.Text
+  image       String?    @db.VarChar(500)
+  parentId    Int?       @map("parent_id") @db.UnsignedInt
+  isActive    Boolean    @default(true) @map("is_active")
+  sortOrder   Int        @default(0) @map("sort_order")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  parent       Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[] @relation("CategoryTree")
+  products     Product[]  @relation("ProductCategory")
+  subProducts  Product[]  @relation("ProductSubcategory")
+
+  @@map("categories")
+}
+
+model Product {
+  id                Int      @id @default(autoincrement()) @db.UnsignedInt
+  name              String   @db.VarChar(255)
+  slug              String   @unique @db.VarChar(255)
+  description       String   @db.Text
+  shortDescription  String?  @map("short_description") @db.VarChar(500)
+  sku               String   @unique @db.VarChar(100)
+  price             Decimal  @db.Decimal(12, 2)
+  compareAtPrice    Decimal? @map("compare_at_price") @db.Decimal(12, 2)
+  costPrice         Decimal? @map("cost_price") @db.Decimal(12, 2)
+  images            Json?
+  categoryId        Int      @map("category_id") @db.UnsignedInt
+  subcategoryId     Int?     @map("subcategory_id") @db.UnsignedInt
+  vendorId          Int?     @map("vendor_id") @db.UnsignedInt
+  brand             String?  @db.VarChar(100)
+  tags              Json?
+  variants          Json?
+  stock             Int      @default(0) @db.UnsignedInt
+  lowStockThreshold Int      @default(10) @map("low_stock_threshold") @db.UnsignedInt
+  weight            Decimal? @db.Decimal(10, 2)
+  rating            Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount       Int      @default(0) @map("review_count") @db.UnsignedInt
+  soldCount         Int      @default(0) @map("sold_count") @db.UnsignedInt
+  isFeatured        Boolean  @default(false) @map("is_featured")
+  isActive          Boolean  @default(true) @map("is_active")
+  seoTitle          String?  @map("seo_title") @db.VarChar(255)
+  seoDescription    String?  @map("seo_description") @db.Text
+  seoKeywords       Json?    @map("seo_keywords")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  category    Category       @relation("ProductCategory", fields: [categoryId], references: [id])
+  subcategory Category?      @relation("ProductSubcategory", fields: [subcategoryId], references: [id])
+  vendor      Vendor?        @relation(fields: [vendorId], references: [id])
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  wishlist    WishlistItem[]
+
+  @@index([categoryId, isActive])
+  @@index([vendorId])
+  @@map("products")
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int        @unique @map("user_id") @db.UnsignedInt
+  couponId  Int?       @map("coupon_id") @db.UnsignedInt
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coupon    Coupon?    @relation(fields: [couponId], references: [id])
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        Int     @id @default(autoincrement()) @db.UnsignedInt
+  cartId    Int     @map("cart_id") @db.UnsignedInt
+  productId Int     @map("product_id") @db.UnsignedInt
+  quantity  Int     @default(1) @db.UnsignedInt
+  variant   String? @db.VarChar(100)
+  price     Decimal @db.Decimal(12, 2)
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId, variant])
+  @@map("cart_items")
+}
+
+model WishlistItem {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int      @map("user_id") @db.UnsignedInt
+  productId Int      @map("product_id") @db.UnsignedInt
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
+}
+
+model Coupon {
+  id             Int        @id @default(autoincrement()) @db.UnsignedInt
+  code           String     @unique @db.VarChar(50)
+  description    String?    @db.VarChar(500)
+  type           CouponType
+  value          Decimal    @db.Decimal(12, 2)
+  minOrderAmount Decimal?   @map("min_order_amount") @db.Decimal(12, 2)
+  maxDiscount    Decimal?   @map("max_discount") @db.Decimal(12, 2)
+  usageLimit     Int?       @map("usage_limit") @db.UnsignedInt
+  usedCount      Int        @default(0) @map("used_count") @db.UnsignedInt
+  perUserLimit   Int        @default(1) @map("per_user_limit") @db.UnsignedInt
+  validFrom      DateTime   @map("valid_from")
+  validUntil     DateTime   @map("valid_until")
+  isActive       Boolean    @default(true) @map("is_active")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  carts          Cart[]
+  orders         Order[]
+
+  @@map("coupons")
+}
+
+model Order {
+  id               Int            @id @default(autoincrement()) @db.UnsignedInt
+  orderNumber      String         @unique @map("order_number") @db.VarChar(50)
+  userId           Int            @map("user_id") @db.UnsignedInt
+  subtotal         Decimal        @db.Decimal(12, 2)
+  discount         Decimal        @default(0) @db.Decimal(12, 2)
+  tax              Decimal        @default(0) @db.Decimal(12, 2)
+  shipping         Decimal        @default(0) @db.Decimal(12, 2)
+  total            Decimal        @db.Decimal(12, 2)
+  couponId         Int?           @map("coupon_id") @db.UnsignedInt
+  shipStreet       String         @map("ship_street") @db.VarChar(255)
+  shipCity         String         @map("ship_city") @db.VarChar(100)
+  shipState        String         @map("ship_state") @db.VarChar(100)
+  shipCountry      String         @map("ship_country") @db.VarChar(100)
+  shipZipCode      String         @map("ship_zip_code") @db.VarChar(20)
+  shipPhone        String?        @map("ship_phone") @db.VarChar(30)
+  status           OrderStatus    @default(pending)
+  paymentStatus    PaymentStatus  @default(pending) @map("payment_status")
+  paymentMethod    PaymentMethod? @map("payment_method")
+  paymentIntentId  String?        @map("payment_intent_id") @db.VarChar(255)
+  razorpayOrderId  String?        @map("razorpay_order_id") @db.VarChar(255)
+  trackingNumber   String?        @map("tracking_number") @db.VarChar(100)
+  trackingUrl      String?        @map("tracking_url") @db.VarChar(500)
+  notes            String?        @db.Text
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  user           User                 @relation(fields: [userId], references: [id])
+  coupon         Coupon?              @relation(fields: [couponId], references: [id])
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  reviews        Review[]
+
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  orderId   Int      @map("order_id") @db.UnsignedInt
+  productId Int      @map("product_id") @db.UnsignedInt
+  vendorId  Int?     @map("vendor_id") @db.UnsignedInt
+  name      String   @db.VarChar(255)
+  sku       String   @db.VarChar(100)
+  image     String?  @db.VarChar(500)
+  price     Decimal  @db.Decimal(12, 2)
+  quantity  Int      @db.UnsignedInt
+  variant   String?  @db.VarChar(100)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+  vendor    Vendor?  @relation(fields: [vendorId], references: [id])
+
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  orderId   Int      @map("order_id") @db.UnsignedInt
+  status    String   @db.VarChar(50)
+  note      String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_history")
+}
+
+model Review {
+  id                 Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId             Int      @map("user_id") @db.UnsignedInt
+  productId          Int      @map("product_id") @db.UnsignedInt
+  orderId            Int?     @map("order_id") @db.UnsignedInt
+  rating             Int      @db.UnsignedInt
+  title              String?  @db.VarChar(255)
+  comment            String   @db.Text
+  images             Json?
+  isVerifiedPurchase Boolean  @default(false) @map("is_verified_purchase")
+  isApproved         Boolean  @default(false) @map("is_approved")
+  helpfulCount       Int      @default(0) @map("helpful_count") @db.UnsignedInt
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order              Order?   @relation(fields: [orderId], references: [id])
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int      @map("user_id") @db.UnsignedInt
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(255)
+  message   String   @db.Text
+  data      Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  link      String?  @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId     Int?     @map("user_id") @db.UnsignedInt
+  action     String   @db.VarChar(100)
+  resource   String   @db.VarChar(100)
+  resourceId String?  @map("resource_id") @db.VarChar(50)
+  details    Json?
+  ip         String?  @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+model Banner {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  title       String   @db.VarChar(255)
+  subtitle    String?  @db.VarChar(500)
+  image       String   @db.VarChar(500)
+  mobileImage String?  @map("mobile_image") @db.VarChar(500)
+  link        String?  @db.VarChar(500)
+  position    String   @default("hero") @db.VarChar(20)
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("banners")
+}
+
+model Blog {
+  id              Int       @id @default(autoincrement()) @db.UnsignedInt
+  title           String    @db.VarChar(255)
+  slug            String    @unique @db.VarChar(255)
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImage      String?   @map("cover_image") @db.VarChar(500)
+  authorId        Int       @map("author_id") @db.UnsignedInt
+  tags            Json?
+  isPublished     Boolean   @default(false) @map("is_published")
+  publishedAt     DateTime? @map("published_at")
+  seoTitle        String?   @map("seo_title") @db.VarChar(255)
+  seoDescription  String?   @map("seo_description") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  author          User      @relation(fields: [authorId], references: [id])
+
+  @@map("blogs")
+}
+
+model Analytics {
+  id                Int      @id @default(autoincrement()) @db.UnsignedInt
+  date              DateTime @unique @db.Date
+  revenue           Decimal  @default(0) @db.Decimal(14, 2)
+  orders            Int      @default(0) @db.UnsignedInt
+  newUsers          Int      @default(0) @map("new_users") @db.UnsignedInt
+  pageViews         Int      @default(0) @map("page_views") @db.UnsignedInt
+  conversionRate    Decimal  @default(0) @map("conversion_rate") @db.Decimal(5, 2)
+  averageOrderValue Decimal  @default(0) @map("average_order_value") @db.Decimal(12, 2)
+  topProducts       Json?    @map("top_products")
+  topCategories     Json?    @map("top_categories")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("analytics")
+}

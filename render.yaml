@@ -1,0 +1,36 @@
+# Render Blueprint for the PRIVATE PREVIEW of the Nexus Commerce API (demo data only).
+# Free plan: the service sleeps after 15 minutes without traffic, has an ephemeral disk and may restart at any time.
+# Secrets are never stored in this file: `generateValue` makes Render create them, `sync: false` prompts for them.
+services:
+  - type: web
+    name: nexus-commerce-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    # Liveness only (does not touch the database), so a sleeping/paused free database cannot cause restart loops.
+    healthCheckPath: /api/v1/health
+    # Deploy only when you trigger it from the dashboard.
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # >= 32 random characters each and different from one another; the API refuses to start otherwise.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      # Prompted in the dashboard. Never commit these values.
+      # Aiven MySQL. Template (see docs/PREVIEW_DEPLOYMENT.md; check it with `npm run db:check-url` BEFORE pasting it here):
+      #   mysql://<user>:<password>@<host>:<port>/<database>?sslaccept=strict&sslcert=/app/apps/api/certs/aiven-ca.pem&connection_limit=5&connect_timeout=30
+      - key: DATABASE_URL
+        sync: false
+      # The Vercel preview origin, https://... with no path and no trailing slash. It is not known until the web app has been
+      # deployed once: enter any valid https origin (for example https://example.com) first, then edit it afterwards.
+      - key: CLIENT_URL
+        sync: false
+      # Number of proxies in front of the API (Vercel rewrite + Render). Verify client IPs after the first deploy.
+      - key: TRUST_PROXY_HOPS
+        value: "1"

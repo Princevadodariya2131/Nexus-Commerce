@@ -1,0 +1,14 @@
+# Keep the build context small and keep secrets / host-built artefacts out of image layers.
+# (Without this, `COPY . .` overwrites the container's node_modules with the host's, e.g. macOS/Windows binaries.)
+**/node_modules
+**/.next
+**/dist
+**/coverage
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/.DS_Store
+*.zip

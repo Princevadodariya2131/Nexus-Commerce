@@ -1,0 +1,58 @@
+# LOCAL DEVELOPMENT ONLY (root/root database, every port bound to loopback).
+# This is not a production deployment file.
+#
+#   export JWT_SECRET=$(openssl rand -base64 48) JWT_REFRESH_SECRET=$(openssl rand -base64 48) COOKIE_SECRET=$(openssl rand -base64 48)
+#   docker compose up --build
+services:
+  mysql:
+    image: mysql:8
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: nexus_commerce
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # Schema generated from apps/api/prisma/schema.prisma (see apps/api/prisma/baseline-candidate/README.md).
+      # The older database/nexus_commerce.sql has drifted from the Prisma schema and contains DROP TABLE statements.
+      - ./apps/api/prisma/baseline-candidate/migration.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      # The image defaults to production; plain-http localhost needs development mode so that auth cookies
+      # are not Secure-only.
+      NODE_ENV: development
+      DATABASE_URL: mysql://root:root@mysql:3306/nexus_commerce
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -base64 48)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      CLIENT_URL: http://localhost:3000
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are inlined into the browser bundle at BUILD time; a runtime `environment:`
+        # entry has no effect. It must be a URL the BROWSER can reach (not the internal "api" hostname).
+        NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  mysql-data:

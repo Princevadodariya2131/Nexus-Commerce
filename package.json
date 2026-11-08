@@ -1,0 +1,42 @@
+{
+  "name": "nexus-commerce",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise AI-powered e-commerce SaaS platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace=@nexus/api",
+    "dev:web": "npm run dev --workspace=@nexus/web",
+    "build": "npm run build:shared && npm run build:api && npm run build:web",
+    "build:shared": "npm run build --workspace=@nexus/shared",
+    "build:api": "npm run build:shared && npm run build --workspace=@nexus/api",
+    "build:web": "npm run build --workspace=@nexus/web",
+    "start": "concurrently \"npm run start --workspace=@nexus/api\" \"npm run start --workspace=@nexus/web\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && npm run test:scripts",
+    "test:scripts": "node --test \"scripts/__tests__/*.test.mjs\"",
+    "db:validate": "node scripts/db-guard.mjs validate",
+    "db:generate": "node scripts/db-guard.mjs generate",
+    "db:baseline:candidate": "node scripts/baseline-candidate.mjs",
+    "db:migrate:status": "node scripts/db-guard.mjs migrate status",
+    "db:migrate:deploy": "node scripts/db-guard.mjs migrate deploy",
+    "db:migrate:dev": "node scripts/db-guard.mjs migrate dev",
+    "db:baseline": "node scripts/create-baseline-migration.mjs",
+    "db:baseline:compare": "node scripts/compare-baseline.mjs",
+    "db:check-url": "node scripts/check-database-url.mjs",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
